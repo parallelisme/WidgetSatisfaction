@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Synthèse des Satisfactions</title>
+<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Marianne:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+--primary: #2563eb;
+--primary-hover: #1d4ed8;
+--background: #ffffff;
+--card-bg: #ffffff;
+--text: #1e293b;
+--text-muted: #64748b;
+--border: #e2e8f0;
+--grey-50: #f8fafc;
+--grey-200: #e2e8f0;
+--radius: 6px;
+--shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] {
+--background: #0f172a;
+--card-bg: #1e293b;
+--text: #f8fafc;
+--text-muted: #94a3b8;
+--border: #334155;
+--grey-50: #1e293b;
+--grey-200: #475569;
+--primary: #3b82f6;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+font-family: "Marianne", system-ui, -apple-system, sans-serif;
+background: var(--background);
+color: var(--text);
+padding: 1rem;
+line-height: 1.5;
+}
+
+.container {
+max-width: 1200px;
+margin: 0 auto;
+background: var(--card-bg);
+border: 1px solid var(--border);
+border-radius: var(--radius);
+box-shadow: var(--shadow);
+}
+
+.header {
+display: flex;
+justify-content: space-between;
+align-items: center;
+padding: 1rem 1.5rem;
+border-bottom: 1px solid var(--border);
+}
+
+.title {
+font-size: 1.25rem;
+font-weight: 700;
+color: var(--primary);
+}
+
+.header-actions {
+display: flex;
+gap: 0.5rem;
+align-items: center;
+}
+
+.btn {
+background: var(--grey-50);
+border: 1px solid var(--border);
+padding: 0.375rem 0.75rem;
+cursor: pointer;
+font-size: 0.875rem;
+font-weight: 500;
+border-radius: var(--radius);
+color: var(--text);
+display: inline-flex;
+align-items: center;
+gap: 0.25rem;
+}
+
+.btn:hover { background: var(--grey-200); }
+.btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
+
+.btn-icon {
+padding: 0.2rem 0.4rem;
+font-size: 0.75rem;
+line-height: 1;
+}
+
+.navigation {
+display: flex;
+padding: 1rem 1.5rem;
+border-bottom: 1px solid var(--border);
+align-items: center;
+}
+
+.column-title {
+font-size: 1.125rem;
+font-weight: 600;
+color: var(--primary);
+}
+
+.controls-bar {
+display: flex;
+padding: 0.75rem 1.5rem;
+border-bottom: 1px solid var(--border);
+justify-content: flex-end;
+}
+
+.content {
+padding: 1.5rem;
+min-height: 500px;
+}
+
+.chart-container {
+position: relative;
+width: 100%;
+min-height: 450px;
+}
+
+canvas { max-height: 500px !important; }
+
+.modal, .export-modal {
+display: none;
+position: fixed;
+z-index: 1000;
+left: 0; top: 0;
+width: 100%; height: 100%;
+background: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content, .export-modal-content {
+background: var(--card-bg);
+margin: 5% auto;
+padding: 1.5rem;
+border: 1px solid var(--border);
+width: 90%;
+max-width: 480px;
+border-radius: var(--radius);
+box-shadow: var(--shadow);
+}
+
+.modal-header {
+display: flex;
+justify-content: space-between;
+align-items: center;
+margin-bottom: 1rem;
+padding-bottom: 0.75rem;
+border-bottom: 1px solid var(--border);
+}
+
+.close-modal { font-size: 1.5rem; cursor: pointer; color: var(--text-muted); }
+
+.column-list, #colorList {
+display: flex;
+flex-direction: column;
+gap: 0.5rem;
+margin-bottom: 1rem;
+max-height: 380px;
+overflow-y: auto;
+}
+
+.column-item, .color-item {
+display: flex;
+align-items: center;
+gap: 0.5rem;
+padding: 0.5rem 0.75rem;
+background: var(--grey-50);
+border: 1px solid var(--border);
+border-radius: var(--radius);
+}
+
+.column-label { flex: 1; font-size: 0.9rem; font-weight: 500; }
+.order-controls { display: flex; gap: 0.25rem; }
+.color-picker { width: 1.75rem; height: 1.75rem; border: none; cursor: pointer; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+<h1 class="title">📊 Synthèse des Satisfactions</h1>
+<div class="header-actions">
+<button class="btn" id="themeToggle" title="Changer de thème">🌙</button>
+<button class="btn" id="configBtn">⚙️ Colonnes</button>
+<button class="btn" id="exportBtn">📥 Exporter</button>
+<span class="info-text" id="recordCount" style="font-size:0.875rem; color:var(--text-muted);"></span>
+</div>
+</div>
+<div class="navigation">
+<div class="column-title" id="columnName">Chargement des données...</div>
+</div>
+<div class="controls-bar">
+<button class="btn" id="colorConfigBtn">🎨 Couleurs</button>
+</div>
+<div class="content" id="content">
+<div class="loading" style="text-align:center; padding:2rem;">Connexion à Grist...</div>
+</div>
+</div>
+
+<!-- Modal Colonnes avec réordonnancement -->
+<div id="configModal" class="modal">
+<div class="modal-content">
+<div class="modal-header">
+<h2 class="modal-title">Sélection et ordre des critères</h2>
+<span class="close-modal" id="closeConfigModalBtn">&times;</span>
+</div>
+<p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+Cochez les critères à afficher et utilisez les flèches pour modifier leur ordre d'affichage sur le graphique.
+</p>
+<div class="column-list" id="columnList"></div>
+<button class="btn btn-primary" style="width: 100%;" id="saveConfigBtn">Enregistrer</button>
+</div>
+</div>
+
+<!-- Modal Couleurs -->
+<div id="colorModal" class="modal">
+<div class="modal-content">
+<div class="modal-header">
+<h2 class="modal-title">Personnaliser les couleurs</h2>
+<span class="close-modal" id="closeColorModalBtn">&times;</span>
+</div>
+<div id="colorList"></div>
+<button class="btn btn-primary" style="width: 100%; margin-top: 1rem;" id="saveColorBtn">Enregistrer</button>
+</div>
+</div>
+
+<!-- Modal Export -->
+<div id="exportModal" class="export-modal">
+<div class="export-modal-content" style="text-align: center;">
+<h2>Exporter en PDF</h2>
+<button class="btn btn-primary" id="exportPdfBtn" style="margin: 1rem 0; width: 100%;">Télécharger la synthèse</button>
+<button class="btn" id="closeExportModalBtn" style="width: 100%;">Annuler</button>
+</div>
+</div>
+
+<script>
+let tableData = [];
+let columnOrder = []; // Conserve l'ordre d'affichage personnalisé
+let selectedColumns = [];
+let columnsMeta = {};
+let chart = null;
+let customColors = {};
+const defaultColors = [
+'#00a95f', '#68d89b', '#ffd700', '#ff8c00', '#e1000f', 
+'#000091', '#34cb6a', '#21ab8e', '#8585f5', '#ff7f7f'
+];
+
+// Thème
+const themeToggle = document.getElementById('themeToggle');
+const savedTheme = localStorage.getItem('grist-widget-theme') || 'light';
+document.documentElement.setAttribute('data-theme', savedTheme);
+themeToggle.addEventListener('click', function() {
+const current = document.documentElement.getAttribute('data-theme');
+const newTheme = current === 'dark' ? 'light' : 'dark';
+document.documentElement.setAttribute('data-theme', newTheme);
+localStorage.setItem('grist-widget-theme', newTheme);
+if (chart) {
+updateVisualization();
+}
+});
+
+// Modales
+document.getElementById('configBtn').onclick = function() {
+updateColumnList();
+document.getElementById('configModal').style.display = 'block';
+};
+document.getElementById('closeConfigModalBtn').onclick = function() {
+document.getElementById('configModal').style.display = 'none';
+};
+document.getElementById('saveConfigBtn').onclick = function() {
+document.getElementById('configModal').style.display = 'none';
+updateVisualization();
+};
+
+document.getElementById('colorConfigBtn').onclick = function() {
+openColorModal();
+};
+document.getElementById('closeColorModalBtn').onclick = function() {
+document.getElementById('colorModal').style.display = 'none';
+};
+document.getElementById('saveColorBtn').onclick = function() {
+document.getElementById('colorModal').style.display = 'none';
+updateVisualization();
+};
+
+document.getElementById('exportBtn').onclick = function() {
+document.getElementById('exportModal').style.display = 'block';
+};
+document.getElementById('closeExportModalBtn').onclick = function() {
+document.getElementById('exportModal').style.display = 'none';
+};
+document.getElementById('exportPdfBtn').onclick = function() {
+exportPDF();
+};
+
+// Initialisation Grist
+grist.ready({
+requiredAccess: 'read table',
+columns: [],
+allowSelectBy: true
+});
+
+grist.onRecords(function(records, mappings) {
+if (!records || records.length === 0) {
+document.getElementById('content').innerHTML = '<div style="color:var(--danger); text-align:center;">Aucune donnée disponible dans la table</div>';
+return;
+}
+tableData = records;
+
+let initialCols = [];
+if (mappings) {
+initialCols = Object.keys(mappings);
+initialCols.forEach(function(colId) {
+const m = mappings[colId];
+columnsMeta[colId] = {
+id: colId,
+displayName: m.description || m.label || colId
+};
+});
+} else {
+initialCols = Object.keys(records[0]).filter(function(k) {
+return k !== 'id' && !k.startsWith('_');
+});
+initialCols.forEach(function(colId) {
+columnsMeta[colId] = {
+id: colId,
+displayName: colId
+};
+});
+}
+
+if (columnOrder.length === 0) {
+columnOrder = [...initialCols];
+selectedColumns = [...initialCols];
+}
+
+updateColumnList();
+updateVisualization();
+});
+
+function updateColumnList() {
+const list = document.getElementById('columnList');
+list.innerHTML = '';
+columnOrder.forEach(function(colId, index) {
+const meta = columnsMeta[colId];
+if (!meta) return;
+
+const isChecked = selectedColumns.includes(colId);
+const item = document.createElement('div');
+item.className = 'column-item';
+
+const checkbox = document.createElement('input');
+checkbox.type = 'checkbox';
+checkbox.checked = isChecked;
+checkbox.onchange = function() {
+toggleColumn(colId);
+};
+
+const label = document.createElement('span');
+label.className = 'column-label';
+label.textContent = meta.displayName;
+
+const orderControls = document.createElement('div');
+orderControls.className = 'order-controls';
+
+const upBtn = document.createElement('button');
+upBtn.className = 'btn btn-icon';
+upBtn.innerHTML = '▲';
+upBtn.disabled = index === 0;
+upBtn.onclick = function() {
+moveColumn(index, -1);
+};
+
+const downBtn = document.createElement('button');
+downBtn.className = 'btn btn-icon';
+downBtn.innerHTML = '▼';
+downBtn.disabled = index === columnOrder.length - 1;
+downBtn.onclick = function() {
+moveColumn(index, 1);
+};
+
+orderControls.appendChild(upBtn);
+orderControls.appendChild(downBtn);
+
+item.appendChild(checkbox);
+item.appendChild(label);
+item.appendChild(orderControls);
+list.appendChild(item);
+});
+}
+
+function moveColumn(index, direction) {
+const targetIndex = index + direction;
+if (targetIndex < 0 || targetIndex >= columnOrder.length) return;
+
+const temp = columnOrder[index];
+columnOrder[index] = columnOrder[targetIndex];
+columnOrder[targetIndex] = temp;
+
+updateColumnList();
+}
+
+function toggleColumn(colId) {
+const idx = selectedColumns.indexOf(colId);
+if (idx === -1) {
+selectedColumns.push(colId);
+} else {
+selectedColumns.splice(idx, 1);
+}
+}
+
+function getActiveOrderedColumns() {
+return columnOrder.filter(function(colId) {
+return selectedColumns.includes(colId);
+});
+}
+
+function updateVisualization() {
+const activeCols = getActiveOrderedColumns();
+if (!tableData || activeCols.length === 0) {
+document.getElementById('content').innerHTML = '<div style="text-align:center;">Aucune colonne sélectionnée</div>';
+return;
+}
+
+document.getElementById('columnName').textContent = "Vue d'ensemble - Niveaux de satisfaction";
+document.getElementById('recordCount').textContent = `${tableData.length} réponses • ${activeCols.length} critères`;
+
+renderStackedChart();
+}
+
+function renderStackedChart() {
+const content = document.getElementById('content');
+if (chart) {
+chart.destroy();
+chart = null;
+}
+
+const activeCols = getActiveOrderedColumns();
+const allModalities = new Set();
+const columnStats = {};
+
+activeCols.forEach(function(colId) {
+const data = tableData.map(function(row) {
+return row[colId];
+}).filter(function(val) {
+return val !== null && val !== undefined && val !== '';
+});
+
+const counts = {};
+data.forEach(function(v) {
+const key = String(v);
+counts[key] = (counts[key] || 0) + 1;
+allModalities.add(key);
+});
+columnStats[colId] = { counts: counts, total: data.length };
+});
+
+const modalitiesList = Array.from(allModalities);
+const labels = activeCols.map(function(colId) {
+return columnsMeta[colId].displayName;
+});
+
+const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+const textColor = isDark ? '#f6f6f6' : '#161616';
+const gridColor = isDark ? '#3a3a3a' : '#e5e5e5';
+
+const datasets = modalitiesList.map(function(modality, index) {
+if (!customColors[modality]) {
+customColors[modality] = defaultColors[index % defaultColors.length];
+}
+
+const dataValues = activeCols.map(function(colId) {
+const stat = columnStats[colId];
+const count = stat.counts[modality] || 0;
+return stat.total > 0 ? Number(((count / stat.total) * 100).toFixed(1)) : 0;
+});
+
+return {
+label: modality,
+data: dataValues,
+backgroundColor: customColors[modality],
+borderWidth: 1,
+borderColor: isDark ? '#1e293b' : '#ffffff'
+};
+});
+
+content.innerHTML = '<div class="chart-container"><canvas id="chart"></canvas></div>';
+const ctx = document.getElementById('chart').getContext('2d');
+
+chart = new Chart(ctx, {
+type: 'bar',
+data: { labels: labels, datasets: datasets },
+options: {
+responsive: true,
+maintainAspectRatio: false,
+scales: {
+x: {
+stacked: true,
+ticks: { color: textColor, font: { family: 'Marianne' } },
+grid: { color: gridColor }
+},
+y: {
+stacked: true,
+beginAtZero: true,
+max: 100,
+ticks: { 
+color: textColor,
+callback: function(value) { return value + '%'; }
+},
+grid: { color: gridColor }
+}
+},
+plugins: {
+legend: {
+position: 'right',
+labels: { color: textColor, font: { size: 12, family: 'Marianne' } }
+},
+tooltip: {
+callbacks: {
+label: function(ctx) {
+const activeCols = getActiveOrderedColumns();
+const colId = activeCols[ctx.dataIndex];
+const stat = columnStats[colId];
+const modality = ctx.dataset.label;
+const count = stat && stat.counts[modality] ? stat.counts[modality] : 0;
+const pct = ctx.parsed.y;
+return `${modality} : ${pct}% (${count} réponses)`;
+}
+}
+}
+}
+}
+});
+}
+
+function openColorModal() {
+const activeCols = getActiveOrderedColumns();
+const allModalities = new Set();
+activeCols.forEach(function(colId) {
+tableData.map(function(row) {
+return row[colId];
+}).forEach(function(v) {
+if (v !== null && v !== undefined && v !== '') {
+allModalities.add(String(v));
+}
+});
+});
+renderColorList(Array.from(allModalities));
+document.getElementById('colorModal').style.display = 'block';
+}
+
+function renderColorList(labels) {
+const list = document.getElementById('colorList');
+list.innerHTML = '';
+labels.forEach(function(label) {
+const item = document.createElement('div');
+item.className = 'color-item';
+
+const colorInput = document.createElement('input');
+colorInput.type = 'color';
+colorInput.className = 'color-picker';
+colorInput.value = customColors[label] || defaultColors[0];
+colorInput.onchange = function() {
+customColors[label] = colorInput.value;
+};
+
+const labelSpan = document.createElement('span');
+labelSpan.textContent = label;
+
+item.appendChild(colorInput);
+item.appendChild(labelSpan);
+list.appendChild(item);
+});
+}
+
+async function exportPDF() {
+const content = document.querySelector('.content');
+const canvas = await html2canvas(content, { scale: 2 });
+const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
+const imgData = canvas.toDataURL('image/png');
+const imgWidth = pdf.internal.pageSize.getWidth();
+const imgHeight = (canvas.height * imgWidth) / canvas.width;
+pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+pdf.save('synthese-satisfaction.pdf');
+document.getElementById('exportModal').style.display = 'none';
+}
+</script>
+</body>
+</html>
